@@ -13,9 +13,9 @@
 #include<math.h>
 
  /* Function declarations */
-int serialsort(int size);
-int mergeSort(int start, int stop);
-int merge(int start, int middle, int stop);
+int serialsort(int size, int unsorted[], int tempA[]);
+int mergeSort(int start, int stop, int unsorted[], int tempA[]);
+int merge(int start, int middle, int stop, int unsorted[], int tempA[]);
 int validateSerial();
 int validateParallel();
 void printArray(int arr[], int size);
@@ -63,7 +63,7 @@ int main(int argc, char* argv[]){
 
     // Perform the serial mergesort
     gettimeofday(&tv1, NULL); // start timing
-    serialsort(n);
+    serialsort(n, vecSerial, temp);
     gettimeofday(&tv2, NULL); // stop timing
     double serialTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
         (double) (tv2.tv_sec - tv1.tv_sec);
@@ -102,8 +102,8 @@ int main(int argc, char* argv[]){
 }
 
 // Returns 0 on success and 1 on failure
-int serialsort(int size){
-    if(!(mergeSort(0, size -1))){
+int serialsort(int size, int unsorted[], int tempA[]){
+    if(!(mergeSort(0, size -1, unsorted,  tempA))){
         return 0;
     }else{
         return 1;
@@ -111,46 +111,46 @@ int serialsort(int size){
 }
 
 // Serial mergesort
-int mergeSort(int start, int stop){
+int mergeSort(int start, int stop, int unsorted[], int tempA[]){
     if(start >= stop){
         return 0;
     }
     int middle = ((stop + start) / 2);
-    mergeSort(start, middle);
-    mergeSort(middle+1, stop);
-    merge(start, middle, stop);
+    mergeSort(start, middle, unsorted,  tempA);
+    mergeSort(middle+1, stop, unsorted,  tempA);
+    merge(start, middle, stop, unsorted,  tempA);
     return 0;
 }
 
 // Merge portion of mergesort
-int merge(int start, int middle, int stop){
+int merge(int start, int middle, int stop, int unsorted[], int tempA[]){
     int first = start;
     int second = middle+1;
     int tempIndex = start;
     while(first <= middle && second <= stop){
-        if(vecSerial[first] < vecSerial[second]){
-            temp[tempIndex] = vecSerial[first];
+        if(unsorted[first] < unsorted[second]){
+            tempA[tempIndex] = unsorted[first];
             first++;
             tempIndex++;
         } else {
-            temp[tempIndex] = vecSerial[second];
+            tempA[tempIndex] = unsorted[second];
             second++;
             tempIndex++;
         }
     }
     while(first <= middle){
-        temp[tempIndex] = vecSerial[first];
+        tempA[tempIndex] = unsorted[first];
             first++;
             tempIndex++;
     }
     while(second <= stop){
-        temp[tempIndex] = vecSerial[second];
+        tempA[tempIndex] = unsorted[second];
             second++;
             tempIndex++;
     }
     int i;
     for(i = start; i <= stop; i++){
-        vecSerial[i] = temp[i];
+        unsorted[i] = tempA[i];
     }
     return 0;
 }
@@ -197,15 +197,18 @@ int bucketSort(){
     int s = (int) 10 * processCount * log2(n);
     int *samples;
     samples = (int *) malloc(sizeof(int) * s);
-    int *samples_sorted;
-    samples_sorted = (int *) malloc(sizeof(int) * s);
+    int *samples_temp;
+    samples_temp = (int *) malloc(sizeof(int) * s);
     int i;
     for(i = 0; i < s; i++){
         int random = rand() % 100;
         samples[i] = random;
     }
-    //TODO: samples_sorted = serialsort(samples, s);
+    serialsort(s, samples, samples_temp);
 
+    for(i = 0; i < processCount - 1; i++){
+        pivots[i] = samples[((i+1) * s) / processCount];
+    }
     // Process 0 sends the pivots to all the processes
     return 0;
 }
