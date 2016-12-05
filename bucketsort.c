@@ -32,22 +32,22 @@ int *temp;
 
 /*--------------------------------------------------------------------*/
 int main(int argc, char* argv[]){
-   // Check for 1 command line args
-   if(argc != 2){
-       printf("You need to enter a command line argument to run this program");
-       exit(0);
-   }
    int my_id, root_process, ierr;
     MPI_Status status;
     ierr = MPI_Init(&argc, &argv);
     ierr = MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
     ierr = MPI_Comm_size(MPI_COMM_WORLD, &processCount);
     
+    // Process 0
     if( my_id == 0 ) {
-
-        // Parse command line args
-        n = strtol(argv[1], NULL, 10);
-
+        // Get n from standard input
+        printf("Enter the size of the array:\n");
+        scanf("%ld", &n);
+        // Send n to all the other procs
+        int dest;
+        for(dest = 1; dest < processCount; dest++){
+            MPI_Send(&n, 1, MPI_LONG, dest, 0, MPI_COMM_WORLD);
+        }
         // For timing
         struct timeval  tv1, tv2;
 
@@ -105,11 +105,14 @@ int main(int argc, char* argv[]){
         free(vecSerial);
         free(vecParallel);
         free(temp);
-        return 0;
     } else {
+        // Recieve value of n
+        MPI_Recv(&n, 1, MPI_LONG, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        printf("%ld", n);
 
     }
     ierr = MPI_Finalize();
+    return 0;
 }
 
 // Returns 0 on success and 1 on failure
@@ -221,6 +224,7 @@ int bucketSort(){
         pivots[i] = samples[((i+1) * s) / processCount];
     }
     // Process 0 sends the pivots to all the processes
+
     // MPI_Bcast()
     return 0;
 }
