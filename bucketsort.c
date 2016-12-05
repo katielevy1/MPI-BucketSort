@@ -11,6 +11,7 @@
 #include<time.h>
 #include<sys/time.h>
 #include<math.h>
+#include<mpi.h>
 
  /* Function declarations */
 int serialsort(int size, int unsorted[], int tempA[]);
@@ -31,74 +32,84 @@ int *temp;
 
 /*--------------------------------------------------------------------*/
 int main(int argc, char* argv[]){
-   // Check for 2 command line args
-   if(argc != 3){
-       printf("You need to enter 2 command line arguments to run this program");
+   // Check for 1 command line args
+   if(argc != 2){
+       printf("You need to enter a command line argument to run this program");
        exit(0);
    }
-   
-    // Parse command line args
-    processCount = (int) strtol(argv[1], NULL, 10);
-    n = strtol(argv[2], NULL, 10);
-
-    // For timing
-    struct timeval  tv1, tv2;
-
-    // Allocate memory for global arrays
-    vecSerial = (int *) malloc(sizeof(int) * n);
-    vecParallel = (int *) malloc(sizeof(int) * n);   
-    temp = (int *) malloc(sizeof(int) * n); 
-    int i; 
-
-    // Fill the arrays with the same random numbers
-    srand(time(NULL));
-    for(i = 0; i < n; i++){
-        int random = rand() % 100;
-        vecSerial[i] = random;
-    }
-
-    // Copy first array to second array
-    memcpy(vecParallel, vecSerial, sizeof(int)*n);
-    memcpy(temp, vecSerial, sizeof(int)*n);
-
-    // Perform the serial mergesort
-    gettimeofday(&tv1, NULL); // start timing
-    serialsort(n, vecSerial, temp);
-    gettimeofday(&tv2, NULL); // stop timing
-    double serialTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
-        (double) (tv2.tv_sec - tv1.tv_sec);
-    // Print results.
-    printf("Serial time = %e\n", serialTime);
-    validateSerial();
-    printArray(vecSerial, n);
+   int my_id, root_process, ierr;
+    MPI_Status status;
+    ierr = MPI_Init(&argc, &argv);
+    ierr = MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
+    ierr = MPI_Comm_size(MPI_COMM_WORLD, &processCount);
     
+    if( my_id == 0 ) {
 
-    // Perform the parallel bucketsort
-    gettimeofday(&tv1, NULL); // start timing
+        // Parse command line args
+        n = strtol(argv[1], NULL, 10);
 
-    bucketSort();
- 
-    gettimeofday(&tv2, NULL); // stop timing
-    double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
-        (double) (tv2.tv_sec - tv1.tv_sec);
-    printf("Parallel time = %e\n", parallelTime);
-    //printArray(vecParallel, n);
-    //TODO: Validate parallel 
+        // For timing
+        struct timeval  tv1, tv2;
 
-    // Print results
-    double speedup = serialTime / parallelTime;
-    double efficiency = speedup / processCount;
-    /*printf("Number of processes: %d\n", processCount);
-    printf("Array Size: %ld\n", n);
-    printf("Time to sort with serial merge sort: %e\n", serialTime);
-    printf("Time to sort with parallel bucket sort: %e\n", parallelTime);
-    printf("Speedup: %e\n", speedup);
-    printf("Efficincy: %e\n", efficiency);*/
+        // Allocate memory for global arrays
+        vecSerial = (int *) malloc(sizeof(int) * n);
+        vecParallel = (int *) malloc(sizeof(int) * n);   
+        temp = (int *) malloc(sizeof(int) * n); 
+        int i; 
 
-    free(vecSerial);
-    free(vecParallel);
-    free(temp);
-    return 0;
+        // Fill the arrays with the same random numbers
+        srand(time(NULL));
+        for(i = 0; i < n; i++){
+            int random = rand() % 100;
+            vecSerial[i] = random;
+        }
+
+        // Copy first array to second array
+        memcpy(vecParallel, vecSerial, sizeof(int)*n);
+        memcpy(temp, vecSerial, sizeof(int)*n);
+
+        // Perform the serial mergesort
+        gettimeofday(&tv1, NULL); // start timing
+        serialsort(n, vecSerial, temp);
+        gettimeofday(&tv2, NULL); // stop timing
+        double serialTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
+            (double) (tv2.tv_sec - tv1.tv_sec);
+        // Print results.
+        printf("Serial time = %e\n", serialTime);
+        validateSerial();
+        printArray(vecSerial, n);
+        
+
+        // Perform the parallel bucketsort
+        gettimeofday(&tv1, NULL); // start timing
+
+        bucketSort();
+    
+        gettimeofday(&tv2, NULL); // stop timing
+        double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
+            (double) (tv2.tv_sec - tv1.tv_sec);
+        printf("Parallel time = %e\n", parallelTime);
+        //printArray(vecParallel, n);
+        //TODO: Validate parallel 
+
+        // Print results
+        double speedup = serialTime / parallelTime;
+        double efficiency = speedup / processCount;
+        /*printf("Number of processes: %d\n", processCount);
+        printf("Array Size: %ld\n", n);
+        printf("Time to sort with serial merge sort: %e\n", serialTime);
+        printf("Time to sort with parallel bucket sort: %e\n", parallelTime);
+        printf("Speedup: %e\n", speedup);
+        printf("Efficincy: %e\n", efficiency);*/
+
+        free(vecSerial);
+        free(vecParallel);
+        free(temp);
+        return 0;
+    } else {
+
+    }
+    ierr = MPI_Finalize();
 }
 
 // Returns 0 on success and 1 on failure
@@ -210,5 +221,6 @@ int bucketSort(){
         pivots[i] = samples[((i+1) * s) / processCount];
     }
     // Process 0 sends the pivots to all the processes
+    // MPI_Bcast()
     return 0;
 }
