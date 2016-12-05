@@ -85,8 +85,9 @@ int main(int argc, char* argv[]){
         // Calculate the pivots
         createPivots();
 
-        // Broadcast to recieve n
+        // Broadcast n and pivots to other procs
         MPI_Bcast(&n, 1, MPI_LONG, 0, MPI_COMM_WORLD);
+        MPI_Bcast(pivots, local_n - 1, MPI_INT, 0, MPI_COMM_WORLD);
         printf("%ld", n);
         // Distribute vecParallel to different processes with block distribution
         // local_n is number of elems per proc
@@ -120,6 +121,8 @@ int main(int argc, char* argv[]){
     } else {
         // Broadcast to recieve n
         MPI_Bcast(&n, 1, MPI_LONG, 0, MPI_COMM_WORLD);
+        MPI_Bcast(pivots, local_n - 1, MPI_INT, 0, MPI_COMM_WORLD);
+
         // Distribute vecParallel to different processes with block distribution
         local_n = n / comm_sz;  // local_n is number of elems per proc
         local_vecParallel = (int *)malloc(sizeof(int) * local_n);
