@@ -10,6 +10,7 @@
 #include<string.h>
 #include<time.h>
 #include<sys/time.h>
+#include<math.h>
 
  /* Function declarations */
 int serialsort(int size);
@@ -18,6 +19,7 @@ int merge(int start, int middle, int stop);
 int validateSerial();
 int validateParallel();
 void printArray(int arr[], int size);
+int bucketSort();
 
 
 /* Global variables */
@@ -71,10 +73,10 @@ int main(int argc, char* argv[]){
     printArray(vecSerial, n);
     
 
-    // Perform the parallel mergesort
+    // Perform the parallel bucketsort
     gettimeofday(&tv1, NULL); // start timing
 
-    //TODO: Bucketsort
+    bucketSort();
  
     gettimeofday(&tv2, NULL); // stop timing
     double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
@@ -186,4 +188,24 @@ void printArray(int arr[], int size){
     }
     printf("\n");
     return;
+}
+
+int bucketSort(){
+    // Process 0 computes pivots
+    int *pivots;
+    pivots = (int *) malloc(sizeof(int) * processCount-1);
+    int s = (int) 10 * processCount * log2(n);
+    int *samples;
+    samples = (int *) malloc(sizeof(int) * s);
+    int *samples_sorted;
+    samples_sorted = (int *) malloc(sizeof(int) * s);
+    int i;
+    for(i = 0; i < s; i++){
+        int random = rand() % 100;
+        samples[i] = random;
+    }
+    //TODO: samples_sorted = serialsort(samples, s);
+
+    // Process 0 sends the pivots to all the processes
+    return 0;
 }
