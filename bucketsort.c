@@ -22,7 +22,7 @@ int validateSerial();
 int validateParallel();
 void printArray(int arr[], int size);
 int createPivots();
-int bucketSort();
+int* bucketSort();
 
 
 /* Global variables */
@@ -263,13 +263,14 @@ int createPivots(){
     return 0;
 }
 
-int bucketSort(){
+int* bucketSort(){
+    int *keepVals = NULL;
+    int i, j;
     bucket *buckets = malloc(sizeof(bucket) * comm_sz);
-    for(int i = 0; i < comm_sz; i++){
+    for(i = 0; i < comm_sz; i++){
         buckets[i].size = 0;
         buckets[i].linkedList = NULL;
     }
-    int i, j;
     for(i = 0; i < local_n; i++){
         // Create node with the value
         node *curr = malloc(sizeof(node));
@@ -292,6 +293,27 @@ int bucketSort(){
         buckets[owner].linkedList = curr;
         printf("Proc %d element %i inside bucket %d\n", my_id, curr->value, owner);
     }
-    return 0;
+    // Send values in buckets to other procs
+    for(i = 0; i < comm_sz; i++){
+        if(i != my_id){
+            MPI_Send(&buckets[i].size, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+        } 
+        if (buckets[i].size == 0){
+            continue;
+        }
+        // Create array from values in linkedlist
+        int *values = (int*) malloc(sizeof(int) * buckets[i].size);
+        node *currentNode = buckets[i].linkedList;
+        for(j = 0; j < buckets[i].size; j++){
+            values[j] = currentNode->value;
+            currentNode = currentNode->next;
+        }
+        if(i == my_id){
+            keepVals = values;
+        } else {
+            MPI_Send(values, buckets[i].size, MPI_INT, i, 0, MPI_COMM_WORLD);
+        }
+    }
+    return keepVals;
 
 }
