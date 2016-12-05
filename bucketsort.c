@@ -22,6 +22,7 @@ int validateSerial();
 int validateParallel();
 void printArray(int arr[], int size);
 int createPivots();
+int bucketSort();
 
 
 /* Global variables */
@@ -31,16 +32,29 @@ int *vecSerial;
 int *vecParallel;
 int *temp;
 int *pivots;
+int *local_vecParallel;
+int local_n;
+int my_id, root_process, ierr;
+
+struct node {
+    int value;
+    struct node *next;
+};
+typedef struct node node;
+
+struct bucket {
+    int size;
+    struct node *linkedList;
+};
+typedef struct bucket bucket;
 
 /*--------------------------------------------------------------------*/
 int main(int argc, char* argv[]){
-   int my_id, root_process, ierr;
     MPI_Status status;
     ierr = MPI_Init(&argc, &argv);
     ierr = MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
     ierr = MPI_Comm_size(MPI_COMM_WORLD, &comm_sz);
-    int *local_vecParallel;
-    int local_n;
+    pivots = (int *) malloc(sizeof(int) * comm_sz-1);
 
     // Process 0
     if( my_id == 0 ) {
@@ -87,8 +101,8 @@ int main(int argc, char* argv[]){
 
         // Broadcast n and pivots to other procs
         MPI_Bcast(&n, 1, MPI_LONG, 0, MPI_COMM_WORLD);
-        MPI_Bcast(pivots, local_n - 1, MPI_INT, 0, MPI_COMM_WORLD);
-        printf("%ld", n);
+        MPI_Bcast(pivots, comm_sz - 1, MPI_INT, 0, MPI_COMM_WORLD);
+
         // Distribute vecParallel to different processes with block distribution
         // local_n is number of elems per proc
         local_n = n / comm_sz;
@@ -96,8 +110,7 @@ int main(int argc, char* argv[]){
         MPI_Scatter(vecParallel, local_n, MPI_INT, local_vecParallel, local_n,
             MPI_INT, 0, MPI_COMM_WORLD);
         free(vecParallel);
-
-        // TODO: bucketsort
+        bucketSort();
 
         gettimeofday(&tv2, NULL); // stop timing
         double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
@@ -121,7 +134,7 @@ int main(int argc, char* argv[]){
     } else {
         // Broadcast to recieve n
         MPI_Bcast(&n, 1, MPI_LONG, 0, MPI_COMM_WORLD);
-        MPI_Bcast(pivots, local_n - 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(pivots, comm_sz - 1, MPI_INT, 0, MPI_COMM_WORLD);
 
         // Distribute vecParallel to different processes with block distribution
         local_n = n / comm_sz;  // local_n is number of elems per proc
@@ -131,6 +144,7 @@ int main(int argc, char* argv[]){
         for(int j = 0; j < local_n; j++){
             printf("Process %d: %i\n", my_id, local_vecParallel[j]);
         }
+        bucketSort();
 
     }
     ierr = MPI_Finalize();
@@ -226,9 +240,9 @@ void printArray(int arr[], int size){
     return;
 }
 
+// Creates the pivots for procs to know to which proc to send elems
 int createPivots(){
     // Process 0 computes pivots
-    pivots = (int *) malloc(sizeof(int) * comm_sz-1);
     int s = (int) 10 * comm_sz * log2(n);
     int *samples;
     samples = (int *) malloc(sizeof(int) * s);
@@ -244,5 +258,40 @@ int createPivots(){
     for(i = 0; i < comm_sz - 1; i++){
         pivots[i] = samples[((i+1) * s) / comm_sz];
     }
+    printf("pivots:\n");
+    printArray(pivots, comm_sz - 1);
     return 0;
+}
+
+int bucketSort(){
+    bucket *buckets = malloc(sizeof(bucket) * comm_sz);
+    for(int i = 0; i < comm_sz; i++){
+        buckets[i].size = 0;
+        buckets[i].linkedList = NULL;
+    }
+    int i, j;
+    for(i = 0; i < local_n; i++){
+        // Create node with the value
+        node *curr = malloc(sizeof(node));
+        curr->value = local_vecParallel[i];
+        curr->next = NULL;
+        // Determine owner of the elem value
+        int owner = -1;
+        for(j = 0; j < comm_sz - 1; j++){
+            if(local_vecParallel[i] < pivots[j]){
+                owner = j;
+                break;
+            }
+        }
+        if(owner == -1){
+            owner = comm_sz - 1;
+        }
+        // Add node to the owner's bucket
+        buckets[owner].size++;
+        curr->next = buckets[owner].linkedList;
+        buckets[owner].linkedList = curr;
+        printf("Proc %d element %i inside bucket %d\n", my_id, curr->value, owner);
+    }
+    return 0;
+
 }
