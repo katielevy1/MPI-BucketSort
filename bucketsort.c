@@ -12,6 +12,7 @@
 #include<sys/time.h>
 #include<math.h>
 #include<mpi.h>
+#include<unistd.h>
 
  /* Function declarations */
 int serialsort(int size, int unsorted[], int tempA[]);
@@ -20,15 +21,16 @@ int merge(int start, int middle, int stop, int unsorted[], int tempA[]);
 int validateSerial();
 int validateParallel();
 void printArray(int arr[], int size);
-int bucketSort();
+int createPivots();
 
 
 /* Global variables */
-int processCount;
+int comm_sz;
 long n; //array size
 int *vecSerial;
 int *vecParallel;
 int *temp;
+int *pivots;
 
 /*--------------------------------------------------------------------*/
 int main(int argc, char* argv[]){
@@ -36,24 +38,22 @@ int main(int argc, char* argv[]){
     MPI_Status status;
     ierr = MPI_Init(&argc, &argv);
     ierr = MPI_Comm_rank(MPI_COMM_WORLD, &my_id);
-    ierr = MPI_Comm_size(MPI_COMM_WORLD, &processCount);
-    
+    ierr = MPI_Comm_size(MPI_COMM_WORLD, &comm_sz);
+    int *local_vecParallel;
+    int local_n;
+
     // Process 0
     if( my_id == 0 ) {
         // Get n from standard input
         printf("Enter the size of the array:\n");
         scanf("%ld", &n);
-        // Send n to all the other procs
-        int dest;
-        for(dest = 1; dest < processCount; dest++){
-            MPI_Send(&n, 1, MPI_LONG, dest, 0, MPI_COMM_WORLD);
-        }
+        
         // For timing
         struct timeval  tv1, tv2;
 
         // Allocate memory for global arrays
         vecSerial = (int *) malloc(sizeof(int) * n);
-        vecParallel = (int *) malloc(sizeof(int) * n);   
+        vecParallel = (int *) malloc(sizeof(int) * n);
         temp = (int *) malloc(sizeof(int) * n); 
         int i; 
 
@@ -82,9 +82,22 @@ int main(int argc, char* argv[]){
 
         // Perform the parallel bucketsort
         gettimeofday(&tv1, NULL); // start timing
+        // Calculate the pivots
+        createPivots();
 
-        bucketSort();
-    
+        // Broadcast to recieve n
+        MPI_Bcast(&n, 1, MPI_LONG, 0, MPI_COMM_WORLD);
+        printf("%ld", n);
+        // Distribute vecParallel to different processes with block distribution
+        // local_n is number of elems per proc
+        local_n = n / comm_sz;
+        local_vecParallel = (int *)malloc(sizeof(int) * local_n);
+        MPI_Scatter(vecParallel, local_n, MPI_INT, local_vecParallel, local_n,
+            MPI_INT, 0, MPI_COMM_WORLD);
+        free(vecParallel);
+
+        // TODO: bucketsort
+
         gettimeofday(&tv2, NULL); // stop timing
         double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
             (double) (tv2.tv_sec - tv1.tv_sec);
@@ -94,8 +107,8 @@ int main(int argc, char* argv[]){
 
         // Print results
         double speedup = serialTime / parallelTime;
-        double efficiency = speedup / processCount;
-        /*printf("Number of processes: %d\n", processCount);
+        double efficiency = speedup / comm_sz;
+        /*printf("Number of processes: %d\n", comm_sz);
         printf("Array Size: %ld\n", n);
         printf("Time to sort with serial merge sort: %e\n", serialTime);
         printf("Time to sort with parallel bucket sort: %e\n", parallelTime);
@@ -103,12 +116,18 @@ int main(int argc, char* argv[]){
         printf("Efficincy: %e\n", efficiency);*/
 
         free(vecSerial);
-        free(vecParallel);
         free(temp);
     } else {
-        // Recieve value of n
-        MPI_Recv(&n, 1, MPI_LONG, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        printf("%ld", n);
+        // Broadcast to recieve n
+        MPI_Bcast(&n, 1, MPI_LONG, 0, MPI_COMM_WORLD);
+        // Distribute vecParallel to different processes with block distribution
+        local_n = n / comm_sz;  // local_n is number of elems per proc
+        local_vecParallel = (int *)malloc(sizeof(int) * local_n);
+        MPI_Scatter(vecParallel, local_n, MPI_INT, local_vecParallel, local_n,
+            MPI_INT, 0, MPI_COMM_WORLD);
+        for(int j = 0; j < local_n; j++){
+            printf("Process %d: %i\n", my_id, local_vecParallel[j]);
+        }
 
     }
     ierr = MPI_Finalize();
@@ -204,11 +223,10 @@ void printArray(int arr[], int size){
     return;
 }
 
-int bucketSort(){
+int createPivots(){
     // Process 0 computes pivots
-    int *pivots;
-    pivots = (int *) malloc(sizeof(int) * processCount-1);
-    int s = (int) 10 * processCount * log2(n);
+    pivots = (int *) malloc(sizeof(int) * comm_sz-1);
+    int s = (int) 10 * comm_sz * log2(n);
     int *samples;
     samples = (int *) malloc(sizeof(int) * s);
     int *samples_temp;
@@ -220,11 +238,8 @@ int bucketSort(){
     }
     serialsort(s, samples, samples_temp);
 
-    for(i = 0; i < processCount - 1; i++){
-        pivots[i] = samples[((i+1) * s) / processCount];
+    for(i = 0; i < comm_sz - 1; i++){
+        pivots[i] = samples[((i+1) * s) / comm_sz];
     }
-    // Process 0 sends the pivots to all the processes
-
-    // MPI_Bcast()
     return 0;
 }
