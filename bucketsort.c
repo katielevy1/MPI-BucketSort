@@ -23,6 +23,7 @@ int validateParallel();
 void printArray(int arr[], int size);
 int createPivots();
 int* bucketSort();
+int receiveAndSort(int keepVals[]);
 
 
 /* Global variables */
@@ -110,7 +111,8 @@ int main(int argc, char* argv[]){
         MPI_Scatter(vecParallel, local_n, MPI_INT, local_vecParallel, local_n,
             MPI_INT, 0, MPI_COMM_WORLD);
         free(vecParallel);
-        bucketSort();
+        int *keepVals = bucketSort();
+        receiveAndSort(keepVals);
 
         gettimeofday(&tv2, NULL); // stop timing
         double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
@@ -144,8 +146,8 @@ int main(int argc, char* argv[]){
         for(int j = 0; j < local_n; j++){
             printf("Process %d: %i\n", my_id, local_vecParallel[j]);
         }
-        bucketSort();
-
+        int *keepVals = bucketSort();
+        receiveAndSort(keepVals);
     }
     ierr = MPI_Finalize();
     return 0;
@@ -296,6 +298,7 @@ int* bucketSort(){
     // Send values in buckets to other procs
     for(i = 0; i < comm_sz; i++){
         if(i != my_id){
+            // Sent number of values proc should expect to recieve
             MPI_Send(&buckets[i].size, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
         } 
         if (buckets[i].size == 0){
@@ -316,4 +319,22 @@ int* bucketSort(){
     }
     return keepVals;
 
+}
+int receiveAndSort(int keepVals[]){
+    int sizeMyVals, i, sizeRecv;
+    if(keepVals == NULL){
+        sizeMyVals = 0;
+    } else {
+        sizeMyVals = sizeof(keepVals) / sizeof(int);
+    }
+    for(i = 0; i < comm_sz; i++){
+        if(i == my_id){
+            continue;
+        } else {
+            MPI_Recv(sizeRecv, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            sizeMyVals += sizeRecv;
+        }
+    }
+
+    return 0;
 }
