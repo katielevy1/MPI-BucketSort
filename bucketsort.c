@@ -22,7 +22,7 @@ int validateSerial();
 int validateParallel();
 void printArray(int arr[], int size);
 int createPivots();
-int* bucketSort();
+int bucketSort();
 
 
 /* Global variables */
@@ -35,7 +35,7 @@ int *pivots;
 int *local_vecParallel;
 int local_n;
 int my_id, root_process, ierr;
-int myArrToSort;
+int *myArrToSort;
 
 struct node {
     int value;
@@ -111,7 +111,7 @@ int main(int argc, char* argv[]){
         MPI_Scatter(vecParallel, local_n, MPI_INT, local_vecParallel, local_n,
             MPI_INT, 0, MPI_COMM_WORLD);
         free(vecParallel);
-        int *keepVals = bucketSort();
+        bucketSort();
 
         gettimeofday(&tv2, NULL); // stop timing
         double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
@@ -145,7 +145,7 @@ int main(int argc, char* argv[]){
         for(int j = 0; j < local_n; j++){
             printf("Process %d: %i\n", my_id, local_vecParallel[j]);
         }
-        int *keepVals = bucketSort();
+        bucketSort();
     }
     ierr = MPI_Finalize();
     return 0;
@@ -258,14 +258,15 @@ int createPivots(){
     for(i = 0; i < comm_sz - 1; i++){
         pivots[i] = samples[((i+1) * s) / comm_sz];
     }
+    free(samples);
+    free(samples_temp);
     printf("pivots:\n");
     printArray(pivots, comm_sz - 1);
     return 0;
 }
 
-int* bucketSort(){
-    int *keepVals = NULL;
-    int i, j, sizeRecv;
+int bucketSort(){
+    int i, j, k, sizeRecv;
     int sizeMyVals = 0;
     int *sizeFromOthers = (int *) malloc(sizeof(int)*comm_sz);
     bucket *buckets = malloc(sizeof(bucket) * comm_sz);
@@ -295,6 +296,8 @@ int* bucketSort(){
         buckets[owner].linkedList = curr;
         printf("Proc %d element %i inside bucket %d\n", my_id, curr->value, owner);
     }
+    free(local_vecParallel);
+    free(pivots);
     // Send # of values in buckets to other procs
     for(i = 0; i < comm_sz; i++){
         if(i != my_id){
@@ -318,21 +321,65 @@ int* bucketSort(){
     }
     printf("Proc %d Size of my vals %i\n", my_id, sizeMyVals);
 
+    // allocate memory for an array of vals to sort
+    if(sizeMyVals > 0){
+        myArrToSort = (int *) malloc(sizeof(int)*sizeMyVals);
+    }
+    
     for(i = 0; i < comm_sz; i++){
         // Create array from values in linkedlist
-        int *values = (int*) malloc(sizeof(int) * buckets[i].size);
-        node *currentNode = buckets[i].linkedList;
-        for(j = 0; j < buckets[i].size; j++){
-            values[j] = currentNode->value;
-            currentNode = currentNode->next;
+        int *values;
+        if(buckets[i].size != 0){
+            values = (int *) malloc(sizeof(int) * buckets[i].size);
+            node *currentNode = buckets[i].linkedList;
+            for(j = 0; j < buckets[i].size; j++){
+                values[j] = currentNode->value;
+                currentNode = currentNode->next;
+                printf("Proc %d adding val %i to values for proc %d\n", my_id, values[j], i);
+            }
+            //printArray(values, buckets[i].size);
         }
+        
         if(i == my_id){
-            keepVals = values;
-            // allocate array
+            int index = 0;
+            if(buckets[i].size != 0){
+                // Add my values to myArrToSort
+                for(j = 0; j < buckets[i].size; j++){
+                    printf("Proc %d adding val %i to myArrToSort index %i\n", my_id, values[j], index);
+                    myArrToSort[index] = values[j];
+                    index++;
+                }
+            }
+            // Recieve values from other procs
+            for(j = 0; j < comm_sz; j++){
+                if(j == my_id || sizeFromOthers[j] == 0){
+                    continue;
+                } else {
+                    free(values);
+                    values = (int *) malloc(sizeof(int)*sizeFromOthers[j]);
+                    printf("Proc %d receiving from %i, %i elems\n", my_id, j, sizeFromOthers[j]);
+                    MPI_Recv(&values, sizeFromOthers[j], MPI_INT, j, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    printf("Proc %d received value %i\n", my_id, values[0]);
+                    // Add j's values to myArrToSort
+                    for(k = 0; k < sizeFromOthers[j]; k++){
+                        printf("Proc %d index is %i\n", my_id, index);
+                        myArrToSort[index] = values[k];
+                        index++;
+                    }
+                    free(values);
+                }
+            }
+            if(sizeMyVals > 0){
+                printArray(myArrToSort, sizeMyVals);
+            }
+            
         } else {
-            //MPI_Send(values, buckets[i].size, MPI_INT, i, 0, MPI_COMM_WORLD);
+            if(buckets[i].size != 0){
+                MPI_Send(&values, buckets[i].size, MPI_INT, i, 0, MPI_COMM_WORLD);
+                printf("Proc %d sent value %i, %i elems\n", my_id, values[0], buckets[i].size);
+            }
         }
     }
-    return keepVals;
+    return 0;
 
 }
