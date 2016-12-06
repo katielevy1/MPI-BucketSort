@@ -23,7 +23,6 @@ int validateParallel();
 void printArray(int arr[], int size);
 int createPivots();
 int* bucketSort();
-int receiveAndSort(int keepVals[]);
 
 
 /* Global variables */
@@ -36,6 +35,7 @@ int *pivots;
 int *local_vecParallel;
 int local_n;
 int my_id, root_process, ierr;
+int myArrToSort;
 
 struct node {
     int value;
@@ -112,7 +112,6 @@ int main(int argc, char* argv[]){
             MPI_INT, 0, MPI_COMM_WORLD);
         free(vecParallel);
         int *keepVals = bucketSort();
-        receiveAndSort(keepVals);
 
         gettimeofday(&tv2, NULL); // stop timing
         double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
@@ -147,7 +146,6 @@ int main(int argc, char* argv[]){
             printf("Process %d: %i\n", my_id, local_vecParallel[j]);
         }
         int *keepVals = bucketSort();
-        receiveAndSort(keepVals);
     }
     ierr = MPI_Finalize();
     return 0;
@@ -267,7 +265,9 @@ int createPivots(){
 
 int* bucketSort(){
     int *keepVals = NULL;
-    int i, j;
+    int i, j, sizeRecv;
+    int sizeMyVals = 0;
+    int *sizeFromOthers = (int *) malloc(sizeof(int)*comm_sz);
     bucket *buckets = malloc(sizeof(bucket) * comm_sz);
     for(i = 0; i < comm_sz; i++){
         buckets[i].size = 0;
@@ -295,15 +295,30 @@ int* bucketSort(){
         buckets[owner].linkedList = curr;
         printf("Proc %d element %i inside bucket %d\n", my_id, curr->value, owner);
     }
-    // Send values in buckets to other procs
+    // Send # of values in buckets to other procs
     for(i = 0; i < comm_sz; i++){
         if(i != my_id){
-            // Sent number of values proc should expect to recieve
+            // Send number of values proc should expect to receive
+            printf("Proc %d sending to %i\n", my_id, i);
             MPI_Send(&buckets[i].size, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
-        } 
-        if (buckets[i].size == 0){
-            continue;
+        } else {
+            sizeMyVals += buckets[i].size;
+            // Recieve number of values proc should expect to receive
+            for(j = 0; j < comm_sz; j++){
+                if(j == my_id){
+                    continue;
+                } else {
+                    printf("Proc %d receiving from %i\n", my_id, j);
+                    MPI_Recv(&sizeRecv, 1, MPI_INT, j, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    sizeMyVals += sizeRecv;
+                    sizeFromOthers[j] = sizeRecv;
+                }
+            }
         }
+    }
+    printf("Proc %d Size of my vals %i\n", my_id, sizeMyVals);
+
+    for(i = 0; i < comm_sz; i++){
         // Create array from values in linkedlist
         int *values = (int*) malloc(sizeof(int) * buckets[i].size);
         node *currentNode = buckets[i].linkedList;
@@ -313,28 +328,11 @@ int* bucketSort(){
         }
         if(i == my_id){
             keepVals = values;
+            // allocate array
         } else {
-            MPI_Send(values, buckets[i].size, MPI_INT, i, 0, MPI_COMM_WORLD);
+            //MPI_Send(values, buckets[i].size, MPI_INT, i, 0, MPI_COMM_WORLD);
         }
     }
     return keepVals;
 
-}
-int receiveAndSort(int keepVals[]){
-    int sizeMyVals, i, sizeRecv;
-    if(keepVals == NULL){
-        sizeMyVals = 0;
-    } else {
-        sizeMyVals = sizeof(keepVals) / sizeof(int);
-    }
-    for(i = 0; i < comm_sz; i++){
-        if(i == my_id){
-            continue;
-        } else {
-            MPI_Recv(sizeRecv, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            sizeMyVals += sizeRecv;
-        }
-    }
-
-    return 0;
 }
