@@ -104,7 +104,7 @@ int main(int argc, char* argv[]){
         // Print results.
         printf("Serial time = %e\n", serialTime);
         validateSerial();
-        printArray(vecSerial, n);
+        //printArray(vecSerial, n);
         
 
         // Perform the parallel bucketsort
@@ -134,12 +134,8 @@ int main(int argc, char* argv[]){
 
         //serialsort(numToSort, myArrToSort, tempMyToSort);
         free(tempMyToSort);
-        printf("Proc %d sorted arr:\t", my_id);
-        printArray(myArrToSort, numToSort);
         // Copy my elements to the large array
         memcpy(&vecParallel[0], &myArrToSort[0], sizeof(int)*numToSort);
-        printf("Proc 0 local_vecParallel and numToSort %i:\t", numToSort);
-        printArray(vecParallel, n);
         int index = numToSort;
         MPI_Status status;
         // Receive all the pieces from the procs
@@ -149,8 +145,8 @@ int main(int argc, char* argv[]){
             index += numToSort;
         }
 
-        printf("Final Arrray:\n");
-        printArray(vecParallel, n);
+        //printf("Final Arrray:\n");
+        //printArray(vecParallel, n);
 
         gettimeofday(&tv2, NULL); // stop timing
         double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
@@ -163,12 +159,12 @@ int main(int argc, char* argv[]){
         // Print results
         double speedup = serialTime / parallelTime;
         double efficiency = speedup / comm_sz;
-        /*printf("Number of processes: %d\n", comm_sz);
+        printf("Number of processes: %d\n", comm_sz);
         printf("Array Size: %ld\n", n);
         printf("Time to sort with serial merge sort: %e\n", serialTime);
         printf("Time to sort with parallel bucket sort: %e\n", parallelTime);
         printf("Speedup: %e\n", speedup);
-        printf("Efficincy: %e\n", efficiency);*/
+        printf("Efficincy: %e\n", efficiency);
 
         free(vecSerial);
         free(vecParallel);
@@ -193,8 +189,6 @@ int main(int argc, char* argv[]){
         int *tempMyToSort = (int *)malloc(sizeof(int)*numToSort);
         serialsort(numToSort, myArrToSort, tempMyToSort);
         free(tempMyToSort);
-        printf("Proc %d sorted arr:\t", my_id);
-        printArray(myArrToSort, numToSort);
         // Send sorted array to Process 0
         MPI_Send(myArrToSort, numToSort, MPI_INT, 0, 0, MPI_COMM_WORLD);
         free(myArrToSort);
@@ -299,23 +293,41 @@ int createPivots(){
     // Process 0 computes pivots
     int s = (int) 10 * comm_sz * log2(n);
     int *samples;
-    samples = (int *) malloc(sizeof(int) * s);
     int *samples_temp;
-    samples_temp = (int *) malloc(sizeof(int) * s);
-    int i;
-    for(i = 0; i < s; i++){
-        int random = rand() % n;
-        samples[i] = vecParallel[random];
+    int i, random, index;
+    
+    // Check if sample size is larger than array size
+    // Then all values in array are samples
+    if(s > n){
+        s = n;
+        samples = (int *) malloc(sizeof(int) * s);
+        samples_temp = (int *) malloc(sizeof(int) * s);
+        memcpy(samples, vecParallel, s*sizeof(int));
+    } else {
+        samples = (int *) malloc(sizeof(int) * s);
+        samples_temp = (int *) malloc(sizeof(int) * s);
+        int *samplesIndexSet = (int *)malloc(sizeof(int)*s);
+        // Floyd sampling without replacement
+        index = 0;
+        for(i = n - s; i < n; i++){
+            random = rand() % i;
+            if(samplesIndexSet[random] == 0){
+                samples[index] = vecParallel[random];
+                samplesIndexSet[random] = 1;
+            } else {
+                samples[index] = vecParallel[i];
+                samplesIndexSet[i] = 1;
+            }
+            index++;
+        }
     }
+    
     serialsort(s, samples, samples_temp);
-// TODO: Pivots can't have repitition
     for(i = 0; i < comm_sz - 1; i++){
         pivots[i] = samples[((i+1) * s) / comm_sz];
     }
     free(samples);
     free(samples_temp);
-    printf("pivots:\n");
-    printArray(pivots, comm_sz - 1);
     return 0;
 }
 
@@ -329,8 +341,6 @@ int divideIntoBuckets(){
     bucketStop = (int *) malloc(sizeof(int) * comm_sz);
     int bucketNum = 0;
     
-    // Floyd sampling without replacement
-    // check if larger than n
     for(i = 0; i < local_n; i++){
         // Determine bucket stop
         if(local_vecParallel[i] >= pivots[bucketNum]){
