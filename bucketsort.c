@@ -25,6 +25,8 @@ int createPivots();
 //int bucketSort();
 int divideIntoBuckets();
 int sendBuckets();
+int kWayMerge(int k, int unsorted[], int tempA[]);
+
 
 
 /* Global variables */
@@ -41,6 +43,7 @@ int *valsInBuckets;
 int *myArrToSort;
 int *bucketStop;
 int numToSort;
+int *recvBucketStop;
 
 struct node {
     int value;
@@ -126,7 +129,10 @@ int main(int argc, char* argv[]){
         sendBuckets();
         // TODO: k-way sort
         int *tempMyToSort = (int *)malloc(sizeof(int)*numToSort);
-        serialsort(numToSort, myArrToSort, tempMyToSort);
+
+        kWayMerge(comm_sz, myArrToSort, tempMyToSort);
+
+        //serialsort(numToSort, myArrToSort, tempMyToSort);
         free(tempMyToSort);
         printf("Proc %d sorted arr:\t", my_id);
         printArray(myArrToSort, numToSort);
@@ -287,7 +293,8 @@ void printArray(int arr[], int size){
     return;
 }
 
-// Creates the pivots for procs to know to which proc to send elems
+// Creates the pivots for procs to know to which 
+// buckets to put elems into
 int createPivots(){
     // Process 0 computes pivots
     int s = (int) 10 * comm_sz * log2(n);
@@ -312,7 +319,8 @@ int createPivots(){
     return 0;
 }
 
-
+// Divide the values received from Process 0 into buckets to send 
+// to other processes
 int divideIntoBuckets(){
     int i;
     int *tempbucket = (int *) malloc(sizeof(int) * local_n);
@@ -321,6 +329,8 @@ int divideIntoBuckets(){
     bucketStop = (int *) malloc(sizeof(int) * comm_sz);
     int bucketNum = 0;
     
+    // Floyd sampling without replacement
+    // check if larger than n
     for(i = 0; i < local_n; i++){
         // Determine bucket stop
         if(local_vecParallel[i] >= pivots[bucketNum]){
@@ -347,9 +357,13 @@ int divideIntoBuckets(){
     return 0;
 }
 
+// Send the buckets to other processes for them to sort later
 int sendBuckets(){
     // allocate memory for an array of vals to sort
     myArrToSort = (int *) malloc(sizeof(int)*local_n * 2);
+    recvBucketStop = (int *) malloc(sizeof(int)*comm_sz);
+    int myArrSize = local_n * 2;
+    //  check if index greater than size
     MPI_Status status;
     int i = 0;
     int index = 0;
@@ -375,13 +389,65 @@ int sendBuckets(){
                 &myArrToSort[index], local_n, MPI_INT, i, 123, MPI_COMM_WORLD, &status);
             MPI_Get_count(&status, MPI_INT, &numElems);
             index += numElems;
+            // Reallocate memory if myArrToSort is full
+            if(index > myArrSize){
+                myArrToSort = (int *) realloc(myArrToSort, sizeof(int)*local_n);
+            }
         }
+        recvBucketStop[i] = index;
     }
     //printf("Proc %d i is %i myArrToSort:\n", my_id, i);
     //printArray(myArrToSort, index);
     numToSort = index;
     return 0;
 }
+
+// Merge k different sorted arrays into one
+int kWayMerge(int k, int unsorted[], int tempA[]){
+    int *start = (int *) malloc(sizeof(int) * k);
+    int i;
+    for(i = 0; i < k; i++){
+        if(i == 0){
+            start[0] = 0;
+        } else {
+            start[i] = recvBucketStop[i -1];
+        }
+    }
+    int tempIndex = 0;
+    int min, minProc;
+    int valueLeft = 0; //true
+
+    while(valueLeft == 0){
+        min = 10000;
+        minProc = -1;
+        // Find the minimum value from all k arrays' start
+        for(i = 0; i < k; i++){
+            if(start[i] < recvBucketStop[i]){
+                if(unsorted[start[i]] < min){
+                    min = unsorted[start[i]];
+                    minProc = i;
+                }
+            }
+        }
+        // Check if no more elements
+        if(minProc == -1){
+            valueLeft = -1;
+        } else {
+            // Add to temp array with the value found
+            tempA[tempIndex] = unsorted[start[minProc]];
+            tempIndex++;
+            start[minProc]++;
+        }
+    }
+    for(i = 0; i <= recvBucketStop[k-1]; i++){
+        unsorted[i] = tempA[i];
+    }
+    free(start);
+    return 0;
+}
+
+
+
 
 
 /*
