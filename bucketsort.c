@@ -23,6 +23,7 @@ int validateParallel();
 void printArray(int arr[], int size);
 int createPivots();
 int bucketSort();
+int divideIntoBuckets();
 
 
 /* Global variables */
@@ -35,7 +36,9 @@ int *pivots;
 int *local_vecParallel;
 int local_n;
 int my_id, root_process, ierr;
+int *valsInBuckets;
 int *myArrToSort;
+int *bucketStop;
 
 struct node {
     int value;
@@ -62,6 +65,10 @@ int main(int argc, char* argv[]){
         // Get n from standard input
         printf("Enter the size of the array:\n");
         scanf("%ld", &n);
+        while(n % comm_sz != 0){
+            printf("Please enter an array size divisable by the number of processes:\n");
+            scanf("%ld", &n);
+        }
         
         // For timing
         struct timeval  tv1, tv2;
@@ -111,7 +118,7 @@ int main(int argc, char* argv[]){
         MPI_Scatter(vecParallel, local_n, MPI_INT, local_vecParallel, local_n,
             MPI_INT, 0, MPI_COMM_WORLD);
         free(vecParallel);
-        bucketSort();
+        divideIntoBuckets();
 
         gettimeofday(&tv2, NULL); // stop timing
         double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
@@ -145,8 +152,9 @@ int main(int argc, char* argv[]){
         for(int j = 0; j < local_n; j++){
             printf("Process %d: %i\n", my_id, local_vecParallel[j]);
         }
-        bucketSort();
+        divideIntoBuckets();
     }
+    free(bucketStop);
     ierr = MPI_Finalize();
     return 0;
 }
@@ -265,6 +273,43 @@ int createPivots(){
     return 0;
 }
 
+
+int divideIntoBuckets(){
+    int i;
+    int *tempbucket = (int *) malloc(sizeof(int) * local_n);
+    serialsort(local_n, local_vecParallel, tempbucket);
+    free(tempbucket);
+    bucketStop = (int *) malloc(sizeof(int) * comm_sz);
+    int bucketNum = 0;
+    
+    for(i = 0; i < local_n; i++){
+        // Determine bucket stop
+        if(local_vecParallel[i] >= pivots[bucketNum]){
+            while(local_vecParallel[i] >= pivots[bucketNum]){
+                printf("Proc %d bucketnum %i stop is %i\n", my_id, bucketNum, i);
+                bucketStop[bucketNum] = i;
+                bucketNum++;
+                if(bucketNum == comm_sz - 1){
+                    break;
+                }
+            }
+        }
+        if(bucketNum == comm_sz - 1){
+            break;
+        }
+    }
+    while(bucketNum < comm_sz){
+        bucketStop[bucketNum] = local_n;
+        bucketNum++;
+    }
+    printf("Proc %d i %i bucket indices:", my_id, i);
+    printArray(bucketStop, comm_sz);
+    printArray(local_vecParallel, local_n);
+    return 0;
+}
+
+
+
 int bucketSort(){
     int i, j, k, sizeRecv;
     int sizeMyVals = 0;
@@ -355,18 +400,16 @@ int bucketSort(){
                 if(j == my_id || sizeFromOthers[j] == 0){
                     continue;
                 } else {
-                    free(values);
-                    values = (int *) malloc(sizeof(int)*sizeFromOthers[j]);
+                    int *recVal = (int *) malloc(sizeof(int)*sizeFromOthers[j]);
                     printf("Proc %d receiving from %i, %i elems\n", my_id, j, sizeFromOthers[j]);
-                    MPI_Recv(&values, sizeFromOthers[j], MPI_INT, j, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                    printf("Proc %d received value %i\n", my_id, values[0]);
+                    //MPI_Recv(&recVal, sizeFromOthers[j], MPI_INT, j, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    printf("Proc %d received value %i\n", my_id, recVal[0]);
                     // Add j's values to myArrToSort
                     for(k = 0; k < sizeFromOthers[j]; k++){
                         printf("Proc %d index is %i\n", my_id, index);
                         myArrToSort[index] = values[k];
                         index++;
                     }
-                    free(values);
                 }
             }
             if(sizeMyVals > 0){
@@ -375,7 +418,7 @@ int bucketSort(){
             
         } else {
             if(buckets[i].size != 0){
-                MPI_Send(&values, buckets[i].size, MPI_INT, i, 0, MPI_COMM_WORLD);
+                //MPI_Send(&values, buckets[i].size, MPI_INT, i, 0, MPI_COMM_WORLD);
                 printf("Proc %d sent value %i, %i elems\n", my_id, values[0], buckets[i].size);
             }
         }
