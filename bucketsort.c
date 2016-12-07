@@ -40,6 +40,7 @@ int my_id, root_process, ierr;
 int *valsInBuckets;
 int *myArrToSort;
 int *bucketStop;
+int numToSort;
 
 struct node {
     int value;
@@ -118,14 +119,35 @@ int main(int argc, char* argv[]){
         local_vecParallel = (int *)malloc(sizeof(int) * local_n);
         MPI_Scatter(vecParallel, local_n, MPI_INT, local_vecParallel, local_n,
             MPI_INT, 0, MPI_COMM_WORLD);
-        free(vecParallel);
 
 // BODY OF ALG:
 
         divideIntoBuckets();
         sendBuckets();
         // TODO: k-way sort
+        int *tempMyToSort = (int *)malloc(sizeof(int)*numToSort);
+        serialsort(numToSort, myArrToSort, tempMyToSort);
+        free(tempMyToSort);
+        printf("Proc %d sorted arr:\t", my_id);
+        printArray(myArrToSort, numToSort);
+        // Copy my elements to the large array
+        memcpy(&vecParallel[0], &myArrToSort[0], sizeof(int)*numToSort);
+        printf("Proc 0 local_vecParallel and numToSort %i:\t", numToSort);
+        printArray(vecParallel, n);
+        int index = numToSort;
+        MPI_Status status;
+        // Receive all the pieces from the procs
+        for(i = 1; i < comm_sz; i++){
+            MPI_Recv(&vecParallel[index], n, MPI_INT, i, 0, MPI_COMM_WORLD, &status);
+            MPI_Get_count(&status, MPI_INT, &numToSort);
+            index += numToSort;
+            printf("Proc 0 local_vecParallel after adding proc %d:\n", i);
+            printArray(vecParallel, n);
+            printf("-------------------------------\n");
+        }
 
+        printf("Final Arrray:\n");
+        printArray(vecParallel, n);
 
         gettimeofday(&tv2, NULL); // stop timing
         double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
@@ -145,7 +167,9 @@ int main(int argc, char* argv[]){
         printf("Efficincy: %e\n", efficiency);*/
 
         free(vecSerial);
+        free(vecParallel);
         free(temp);
+        free(myArrToSort);
     } else {
         // Broadcast to recieve n
         MPI_Bcast(&n, 1, MPI_LONG, 0, MPI_COMM_WORLD);
@@ -156,10 +180,23 @@ int main(int argc, char* argv[]){
         local_vecParallel = (int *)malloc(sizeof(int) * local_n);
         MPI_Scatter(vecParallel, local_n, MPI_INT, local_vecParallel, local_n,
             MPI_INT, 0, MPI_COMM_WORLD);
+        
+// BODY OF ALG:
+
         divideIntoBuckets();
         sendBuckets();
+        // TODO: k-way sort
+        int *tempMyToSort = (int *)malloc(sizeof(int)*numToSort);
+        serialsort(numToSort, myArrToSort, tempMyToSort);
+        free(tempMyToSort);
+        printf("Proc %d sorted arr:\t", my_id);
+        printArray(myArrToSort, numToSort);
+        // Send sorted array to Process 0
+        MPI_Send(myArrToSort, numToSort, MPI_INT, 0, 0, MPI_COMM_WORLD);
+        free(myArrToSort);
     }
     free(bucketStop);
+    free(local_vecParallel);
     ierr = MPI_Finalize();
     return 0;
 }
@@ -306,9 +343,10 @@ int divideIntoBuckets(){
         bucketStop[bucketNum] = local_n;
         bucketNum++;
     }
-    printf("Proc %d bucket indices:\t", my_id);
-    printArray(bucketStop, comm_sz);
-    printArray(local_vecParallel, local_n);
+    //printf("Proc %d bucket indices:\t", my_id);
+    //printArray(bucketStop, comm_sz);
+    //printArray(local_vecParallel, local_n);
+    free(pivots);
     return 0;
 }
 
@@ -342,9 +380,9 @@ int sendBuckets(){
             index += numElems;
         }
     }
-    printf("Proc %d i is %i myArrToSort:\n", my_id, i);
-    printArray(myArrToSort, index);
-    
+    //printf("Proc %d i is %i myArrToSort:\n", my_id, i);
+    //printArray(myArrToSort, index);
+    numToSort = index;
     return 0;
 }
 
