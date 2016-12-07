@@ -327,17 +327,12 @@ int sendBuckets(){
         }
         
         if(i == my_id){
-            printf("Proc %d about to add my own myArrToSort sendcount %i index %i:\n", my_id, sendcount, index);
-            printArray(myArrToSort, index);
             // If looking at own bucket, add values to myArrToSort
             memcpy(&myArrToSort[index], &local_vecParallel[start], sizeof(int)*sendcount);
             index += sendcount;
-            printf("Proc %d adding my own myArrToSort sendcount %i index %i:\n", my_id, sendcount, index);
-            printArray(myArrToSort, index);
             
         } else{
             // Send values in bucket i to process i and receive values from process i
-            printf("Proc %d sendrecv count %i\n", my_id, sendcount);
             MPI_Sendrecv(&local_vecParallel[start], sendcount, MPI_INT, i, 123, 
                 &myArrToSort[index], local_n, MPI_INT, i, 123, MPI_COMM_WORLD, &status);
             MPI_Get_count(&status, MPI_INT, &numElems);
