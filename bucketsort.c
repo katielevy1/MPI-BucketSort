@@ -119,9 +119,12 @@ int main(int argc, char* argv[]){
         MPI_Scatter(vecParallel, local_n, MPI_INT, local_vecParallel, local_n,
             MPI_INT, 0, MPI_COMM_WORLD);
         free(vecParallel);
+
+// BODY OF ALG:
+
         divideIntoBuckets();
         sendBuckets();
-
+        // TODO: k-way sort
 
 
         gettimeofday(&tv2, NULL); // stop timing
@@ -260,11 +263,11 @@ int createPivots(){
     samples_temp = (int *) malloc(sizeof(int) * s);
     int i;
     for(i = 0; i < s; i++){
-        int random = rand() % 100;
-        samples[i] = random;
+        int random = rand() % n;
+        samples[i] = vecParallel[random];
     }
     serialsort(s, samples, samples_temp);
-
+// TODO: Pivots can't have repitition
     for(i = 0; i < comm_sz - 1; i++){
         pivots[i] = samples[((i+1) * s) / comm_sz];
     }
@@ -338,12 +341,10 @@ int sendBuckets(){
             MPI_Get_count(&status, MPI_INT, &numElems);
             index += numElems;
         }
-    
+    }
     printf("Proc %d i is %i myArrToSort:\n", my_id, i);
     printArray(myArrToSort, index);
-    } 
-
-
+    
     return 0;
 }
 
