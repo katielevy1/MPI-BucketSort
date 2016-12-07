@@ -22,7 +22,7 @@ int validateSerial();
 int validateParallel();
 void printArray(int arr[], int size);
 int createPivots();
-int bucketSort();
+//int bucketSort();
 int divideIntoBuckets();
 int sendBuckets();
 
@@ -141,9 +141,6 @@ int main(int argc, char* argv[]){
             MPI_Recv(&vecParallel[index], n, MPI_INT, i, 0, MPI_COMM_WORLD, &status);
             MPI_Get_count(&status, MPI_INT, &numToSort);
             index += numToSort;
-            printf("Proc 0 local_vecParallel after adding proc %d:\n", i);
-            printArray(vecParallel, n);
-            printf("-------------------------------\n");
         }
 
         printf("Final Arrray:\n");
@@ -154,7 +151,8 @@ int main(int argc, char* argv[]){
             (double) (tv2.tv_sec - tv1.tv_sec);
         printf("Parallel time = %e\n", parallelTime);
         //printArray(vecParallel, n);
-        //TODO: Validate parallel 
+        // Validate parallel array is correct
+        validateParallel();
 
         // Print results
         double speedup = serialTime / parallelTime;
@@ -267,8 +265,7 @@ int validateSerial(){
     return 0;
 }
 
-// Verify the parallel bucketsort is correct
-// by comparing the arrays
+// Verify the parallel bucketsort is correct by comparing the arrays
 int validateParallel(){
     int i;
     for(i = 0; i < n-1; i++){
@@ -386,6 +383,8 @@ int sendBuckets(){
     return 0;
 }
 
+
+/*
 int bucketSort(){
     int i, j, k, sizeRecv;
     int sizeMyVals = 0;
@@ -502,3 +501,4 @@ int bucketSort(){
     return 0;
 
 }
+*/
