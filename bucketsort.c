@@ -105,22 +105,17 @@ int main(int argc, char* argv[]){
         printf("Serial time = %e\n", serialTime);
         validateSerial();
         //printArray(vecSerial, n);
-        printf("\t1\n");
-
-
+        
         // Perform the parallel bucketsort
         gettimeofday(&tv1, NULL); // start timing
-        printf("\t1.5\n");
-
+        
         // Calculate the pivots
         createPivots();
-        printf("\t2\n");
-
+        
         // Broadcast n and pivots to other procs
         MPI_Bcast(&n, 1, MPI_LONG, 0, MPI_COMM_WORLD);
         MPI_Bcast(pivots, comm_sz - 1, MPI_INT, 0, MPI_COMM_WORLD);
-        printf("\t3\n");
-
+        
         // Distribute vecParallel to different processes with block distribution
         // local_n is number of elems per proc
         local_n = n / comm_sz;
@@ -130,19 +125,15 @@ int main(int argc, char* argv[]){
 
 // BODY OF ALG:
 
-        printf("\t1\n");
         divideIntoBuckets();
         sendBuckets();
-        printf("\t2\n");
         int *tempMyToSort = (int *)malloc(sizeof(int)*numToSort);
 
         kWayMerge(comm_sz, myArrToSort, tempMyToSort);
-        printf("\t3\n");
         //serialsort(numToSort, myArrToSort, tempMyToSort);
         free(tempMyToSort);
         // Copy my elements to the large array
         memcpy(&vecParallel[0], &myArrToSort[0], sizeof(int)*numToSort);
-        printf("\t4\n");
         int index = numToSort;
         MPI_Status status;
         // Receive all the pieces from the procs
@@ -151,7 +142,6 @@ int main(int argc, char* argv[]){
             MPI_Get_count(&status, MPI_INT, &numToSort);
             index += numToSort;
         }
-        printf("\t5\n");
         //printf("Final Arrray:\n");
         //printArray(vecParallel, n);
 
@@ -178,6 +168,7 @@ int main(int argc, char* argv[]){
         free(temp);
         free(myArrToSort);
     } else {
+// Other processes        
         // Broadcast to recieve n
         MPI_Bcast(&n, 1, MPI_LONG, 0, MPI_COMM_WORLD);
         MPI_Bcast(pivots, comm_sz - 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -189,16 +180,12 @@ int main(int argc, char* argv[]){
             MPI_INT, 0, MPI_COMM_WORLD);
         
 // BODY OF ALG:
-        printf("1\n");
         divideIntoBuckets();
         sendBuckets();
-        printf("2\n");
         int *tempMyToSort = (int *)malloc(sizeof(int)*numToSort);
         kWayMerge(comm_sz, myArrToSort, tempMyToSort);
-        printf("3\n");
         // Send sorted array to Process 0
         MPI_Send(myArrToSort, numToSort, MPI_INT, 0, 0, MPI_COMM_WORLD);
-        printf("4\n");
 
         free(myArrToSort);
         free(tempMyToSort);
@@ -306,7 +293,6 @@ int createPivots(){
     int *samples_temp;
     int i, random, index;
     int *samplesIndexSet;
-    printf("\ta\n");
     // Check if sample size is larger than array size
     // Then all values in array are samples
     if(s > n){
@@ -315,17 +301,12 @@ int createPivots(){
         samples_temp = (int *) malloc(sizeof(int) * s);
         memcpy(samples, vecParallel, s*sizeof(int));
     } else {
-        printf("\tB\n");
         samples = (int *) malloc(sizeof(int) * s);
         samples_temp = (int *) malloc(sizeof(int) * s);
         samplesIndexSet = (int *)malloc(sizeof(int)*s);
         // Floyd sampling without replacement
         index = 0;
-        printf("\tC\n");
-        printf("and s is %d", s);
-        printf("n is %ld ", n);
         for(i = n - s; i < n; i++){
-            printf("loop %d ", i);
             random = rand() % i;
             if(samplesIndexSet[random] == 0){
                 samples[index] = vecParallel[random];
@@ -338,12 +319,10 @@ int createPivots(){
         }
         free(samplesIndexSet);
     }
-    printf("\tb\n");
     serialsort(s, samples, samples_temp);
     for(i = 0; i < comm_sz - 1; i++){
         pivots[i] = samples[((i+1) * s) / comm_sz];
     }
-    printf("\tc\n");
     free(samples);
     free(samples_temp);
     return 0;
@@ -419,6 +398,7 @@ int sendBuckets(){
             index += numElems;
             // Reallocate memory if myArrToSort is full
             if(index > myArrSize){
+                printf("Reallocating memory\n");
                 myArrToSort = (int *) realloc(myArrToSort, sizeof(int)*local_n);
             }
         }
