@@ -102,7 +102,6 @@ int main(int argc, char* argv[]){
         double serialTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
             (double) (tv2.tv_sec - tv1.tv_sec);
         // Print results.
-        printf("Serial time = %e\n", serialTime);
         validateSerial();
         //printArray(vecSerial, n);
         
@@ -148,7 +147,6 @@ int main(int argc, char* argv[]){
         gettimeofday(&tv2, NULL); // stop timing
         double parallelTime = (double) (tv2.tv_usec - tv1.tv_usec) / 1000000 +
             (double) (tv2.tv_sec - tv1.tv_sec);
-        printf("Parallel time = %e\n", parallelTime);
         //printArray(vecParallel, n);
         // Validate parallel array is correct
         validateParallel();
